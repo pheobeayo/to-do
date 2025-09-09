@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { createWalletClient, createPublicClient, custom, http, parseAbi, formatEther } from 'viem';
+import { createWalletClient, custom, parseAbi, formatEther } from 'viem';
 import { liskSepolia } from 'viem/chains';
+import client from './Client';
 
 // Contract configuration
 const CONTRACT_ADDRESS = '0x389c7aF690CaD99f2FB604B2fe4c5b4bff9EFF2e'; 
@@ -30,6 +31,7 @@ interface Event {
 
 declare global {
   interface Window {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ethereum?: any;
   }
 }
@@ -43,22 +45,16 @@ export default function TodoDApp() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [walletClient, setWalletClient] = useState<ReturnType<typeof createWalletClient> | null>(null);
-  const [publicClient, setPublicClient] = useState<ReturnType<typeof createPublicClient> | null>(null);
   const [balance, setBalance] = useState<string>('0');
 
   // Initialize clients
   useEffect(() => {
-    const client = createPublicClient({
-      chain: liskSepolia,
-      transport: http('https://rpc.sepolia-api.lisk.com')
-    });
-    setPublicClient(client);
-    
     // Check if wallet is already connected
     const checkConnection = async () => {
       try {
         const ethereum = window.ethereum;
         if (ethereum) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const provider = ethereum.providers?.find((p: any) => p.isMetaMask) || ethereum;
           const accounts = await provider.request({ method: 'eth_accounts' });
           if (accounts.length > 0) {
@@ -93,6 +89,7 @@ export default function TodoDApp() {
       setError('');
 
       // If multiple wallets are detected, prefer MetaMask
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const provider = ethereum.providers?.find((p: any) => p.isMetaMask) || ethereum;
 
       const accounts = await provider.request({
@@ -114,12 +111,13 @@ export default function TodoDApp() {
             method: 'wallet_switchEthereumChain',
             params: [{ chainId: '0x106a' }], // 4202 in hex
           });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } catch (switchError: any) {
           if (switchError.code === 4902) {
             await provider.request({
               method: 'wallet_addEthereumChain',
               params: [{
-                chainId: '4202',
+                chainId: '0x106a',
                 chainName: 'Lisk Sepolia Testnet',
                 nativeCurrency: {
                   name: 'Sepolia Ether',
@@ -133,6 +131,7 @@ export default function TodoDApp() {
           }
         }
       }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       setError(`Failed to connect wallet: ${err.message}`);
     }
@@ -140,10 +139,10 @@ export default function TodoDApp() {
 
   // Get balance
   useEffect(() => {
-    if (account && publicClient) {
+    if (account) {
       const getBalance = async () => {
         try {
-          const balance = await publicClient.getBalance({ address: account as `0x${string}` });
+          const balance = await client.getBalance({ address: account as `0x${string}` });
           setBalance(formatEther(balance));
         } catch (err) {
           console.error('Failed to get balance:', err);
@@ -151,21 +150,21 @@ export default function TodoDApp() {
       };
       getBalance();
     }
-  }, [account, publicClient]);
+  }, [account]);
 
   // Load tasks and events
   useEffect(() => {
-    if (publicClient && account) {
+    if (account) {
       loadTasksAndEvents();
     }
-  }, [publicClient, account]);
+  }, [account]);
 
   const loadTasksAndEvents = async () => {
     try {
       setLoading(true);
       
       // Load events to get task IDs
-      const logs = await publicClient.getLogs({
+      const logs = await client.getLogs({
         address: CONTRACT_ADDRESS,
         events: [
           {
@@ -198,9 +197,10 @@ export default function TodoDApp() {
 
       // Process events
       const processedEvents: Event[] = logs.map(log => ({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         type: log.eventName as any,
         id: log.args.id as bigint,
-        description: log.args.description as string,
+        // description: log.args.description as string,
         blockNumber: log.blockNumber,
         transactionHash: log.transactionHash
       }));
@@ -218,7 +218,7 @@ export default function TodoDApp() {
       // Fetch current state of each task
       const taskPromises = Array.from(taskIds).map(async (id) => {
         try {
-          const task = await publicClient.readContract({
+          const task = await client.readContract({
             address: CONTRACT_ADDRESS,
             abi: CONTRACT_ABI,
             functionName: 'getTask',
@@ -234,6 +234,7 @@ export default function TodoDApp() {
       const validTasks = taskResults.filter(task => task !== null) as Task[];
       setTasks(validTasks.sort((a, b) => Number(a.id - b.id)));
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       setError(`Failed to load tasks: ${err.message}`);
     } finally {
@@ -249,7 +250,7 @@ export default function TodoDApp() {
       setLoading(true);
       setError('');
 
-      const { request } = await publicClient.simulateContract({
+      const { request } = await client.simulateContract({
         address: CONTRACT_ADDRESS,
         abi: CONTRACT_ABI,
         functionName: 'createTask',
@@ -259,10 +260,11 @@ export default function TodoDApp() {
 
       const hash = await walletClient.writeContract(request);
       
-      await publicClient.waitForTransactionReceipt({ hash });
+      await client.waitForTransactionReceipt({ hash });
       
       setNewTaskDescription('');
       await loadTasksAndEvents();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       setError(`Failed to create task: ${err.message}`);
     } finally {
@@ -278,7 +280,7 @@ export default function TodoDApp() {
       setLoading(true);
       setError('');
 
-      const { request } = await publicClient.simulateContract({
+      const { request } = await client.simulateContract({
         address: CONTRACT_ADDRESS,
         abi: CONTRACT_ABI,
         functionName: 'updateTask',
@@ -288,10 +290,11 @@ export default function TodoDApp() {
 
       const hash = await walletClient.writeContract(request);
       
-      await publicClient.waitForTransactionReceipt({ hash });
+      await client.waitForTransactionReceipt({ hash });
       
       setEditingTask(null);
       await loadTasksAndEvents();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       setError(`Failed to update task: ${err.message}`);
     } finally {
@@ -307,7 +310,7 @@ export default function TodoDApp() {
       setLoading(true);
       setError('');
 
-      const { request } = await publicClient.simulateContract({
+      const { request } = await client.simulateContract({
         address: CONTRACT_ADDRESS,
         abi: CONTRACT_ABI,
         functionName: 'completeTask',
@@ -317,9 +320,10 @@ export default function TodoDApp() {
 
       const hash = await walletClient.writeContract(request);
       
-      await publicClient.waitForTransactionReceipt({ hash });
+      await client.waitForTransactionReceipt({ hash });
       
       await loadTasksAndEvents();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       setError(`Failed to complete task: ${err.message}`);
     } finally {
